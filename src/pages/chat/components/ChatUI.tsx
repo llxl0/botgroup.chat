@@ -24,6 +24,7 @@ import { AdBanner, AdBannerMobile } from './AdSection';
 import { useUserStore } from '@/store/userStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getAvatarData } from '@/utils/avatar';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 
 // 修改 KaTeXStyle 组件
@@ -72,7 +73,11 @@ const ChatUI = () => {
   const [users, setUsers] = useState([]);
   const [allNames, setAllNames] = useState([]);
   const [showMembers, setShowMembers] = useState(false);
-  const [messages, setMessages] = useState([]);
+  // 使用 localStorage 来持久化消息，key 包含群组 ID 以区分不同群组的聊天记录
+  const [messages, setMessages, clearMessages] = useLocalStorage(
+    `chat_messages_group_${id}`,
+    []
+  );
   const [showAd, setShowAd] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [pendingContent, setPendingContent] = useState("");
@@ -649,6 +654,10 @@ const ChatUI = () => {
           isGroupDiscussionMode={isGroupDiscussionMode}
           onToggleGroupDiscussion={() => setIsGroupDiscussionMode(!isGroupDiscussionMode)}
           getAvatarData={getAvatarData}
+          onClearMessages={() => {
+            clearMessages();
+            setShowMembers(false);
+          }}
         />
       </div>
 
