@@ -53,6 +53,28 @@ export const MembersManagement = ({
               />
             </div>
           </div>
+          {onClearMessages && (
+            <div className="mb-4 p-4 bg-red-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-red-800">清除聊天记录</div>
+                  <div className="text-xs text-red-600">此操作不可恢复</div>
+                </div>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm('确定要清除所有聊天记录吗？此操作不可恢复！')) {
+                      onClearMessages();
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  清除
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex justify-between items-center mb-4">
             <span className="text-sm text-gray-500">当前成员（{users.length}）</span>
             <Button variant="outline" size="sm">
