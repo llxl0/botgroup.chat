@@ -22,6 +22,7 @@ interface MembersManagementProps {
   getAvatarData: (name: string) => { backgroundColor: string; text: string };
   isGroupDiscussionMode: boolean;
   onToggleGroupDiscussion: () => void;
+  onClearMessages?: () => void; // 更改为可选属性
 }
 
 export const MembersManagement = ({
@@ -32,7 +33,8 @@ export const MembersManagement = ({
   handleToggleMute,
   getAvatarData,
   isGroupDiscussionMode,
-  onToggleGroupDiscussion
+  onToggleGroupDiscussion,
+  onClearMessages, // 添加到析构
 }: MembersManagementProps) => {
   return (
     <Sheet open={showMembers} onOpenChange={setShowMembers}>
@@ -65,7 +67,7 @@ export const MembersManagement = ({
                   size="sm"
                   onClick={() => {
                     if (window.confirm('确定要清除所有聊天记录吗？此操作不可恢复！')) {
-                      onClearMessages();
+                      onClearMessages?.();
                     }
                   }}
                 >
