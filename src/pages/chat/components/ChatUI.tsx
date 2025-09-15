@@ -654,10 +654,10 @@ const ChatUI = () => {
           isGroupDiscussionMode={isGroupDiscussionMode}
           onToggleGroupDiscussion={() => setIsGroupDiscussionMode(!isGroupDiscussionMode)}
           getAvatarData={getAvatarData}
-          onClearMessages={() => {
+          onClearMessages={clearMessages ? () => {
             clearMessages();
             setShowMembers(false);
-          }}
+          } : undefined}
         />
       </div>
 
