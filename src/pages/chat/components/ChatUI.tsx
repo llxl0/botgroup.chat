@@ -74,10 +74,36 @@ const ChatUI = () => {
   const [allNames, setAllNames] = useState([]);
   const [showMembers, setShowMembers] = useState(false);
   // 使用 localStorage 来持久化消息，key 包含群组 ID 以区分不同群组的聊天记录
-  const [messages, setMessages, clearMessages] = useLocalStorage(
+  const localStorageHook = useLocalStorage(
     `chat_messages_group_${id}`,
     []
   );
+  
+  // 安全地解构 hook 返回值
+  const messages = localStorageHook[0] || [];
+  const setMessages = localStorageHook[1] || (() => {});
+  const clearMessagesFunc = localStorageHook[2];
+  
+  // 创建一个安全的清除函数
+  const clearMessages = () => {
+    try {
+      if (typeof clearMessagesFunc === 'function') {
+        clearMessagesFunc();
+      } else {
+        // 后备方案：直接清空状态和 localStorage
+        setMessages([]);
+        try {
+          window.localStorage.removeItem(`chat_messages_group_${id}`);
+        } catch (e) {
+          console.error('清除 localStorage 失败:', e);
+        }
+      }
+    } catch (error) {
+      console.error('清除消息时出错:', error);
+      // 即使出错也尝试清空消息
+      setMessages([]);
+    }
+  };
   const [showAd, setShowAd] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [pendingContent, setPendingContent] = useState("");
@@ -654,10 +680,10 @@ const ChatUI = () => {
           isGroupDiscussionMode={isGroupDiscussionMode}
           onToggleGroupDiscussion={() => setIsGroupDiscussionMode(!isGroupDiscussionMode)}
           getAvatarData={getAvatarData}
-          onClearMessages={clearMessages ? () => {
+          onClearMessages={() => {
             clearMessages();
             setShowMembers(false);
-          } : undefined}
+          }}
         />
       </div>
 
