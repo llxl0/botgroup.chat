@@ -22,6 +22,7 @@ interface MembersManagementProps {
   getAvatarData: (name: string) => { backgroundColor: string; text: string };
   isGroupDiscussionMode: boolean;
   onToggleGroupDiscussion: () => void;
+  onClearMessages?: () => void;
 }
 
 export const MembersManagement = ({
@@ -32,7 +33,8 @@ export const MembersManagement = ({
   handleToggleMute,
   getAvatarData,
   isGroupDiscussionMode,
-  onToggleGroupDiscussion
+  onToggleGroupDiscussion,
+  onClearMessages
 }: MembersManagementProps) => {
   return (
     <Sheet open={showMembers} onOpenChange={setShowMembers}>
