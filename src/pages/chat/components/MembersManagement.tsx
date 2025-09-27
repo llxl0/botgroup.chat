@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { UserPlus, Mic, MicOff } from 'lucide-react';
+import { UserPlus, Mic, MicOff, Trash2 } from 'lucide-react';
 import { type AICharacter } from "@/config/aiCharacters";
 import { Switch } from "@/components/ui/switch";
 
