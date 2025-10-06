@@ -79,9 +79,17 @@ export async function onRequestPost({ env, request }) {
     });
 
   } catch (error) {
-    console.error(error.message);
+    console.error("API Error in chat.ts:", error.message, error.stack);
+    let errorMessage = "对不起，服务又断开了。";
+    if (error.message.includes("API密钥未配置")) {
+      errorMessage = "对不起，API密钥未配置，请联系管理员。";
+    } else if (error.message.includes("不支持的模型类型")) {
+      errorMessage = "对不起，不支持的模型类型，请联系管理员。";
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
     return Response.json(
-      { error: error.message },
+      { error: errorMessage },
       { status: 500 }
     );
   }
