@@ -41,7 +41,10 @@ export async function onRequestPost({ env, request }) {
       baseMessages.splice(baseMessages.length - index, 0, userMessage);
     }
     const messages = baseMessages;
-    //console.log(JSON.stringify(messages));
+    console.log("Requesting model:", model);
+    console.log("Using API Key from env:", modelConfig.apiKey);
+    console.log("Using baseURL:", modelConfig.baseURL);
+    console.log("Payload to OpenAI:", JSON.stringify({ model, messages }, null, 2));
 
     // 使用流式响应
     const stream = await openai.chat.completions.create({
