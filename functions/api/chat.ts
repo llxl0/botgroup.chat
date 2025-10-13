@@ -41,7 +41,10 @@ export async function onRequestPost({ env, request }) {
       baseMessages.splice(baseMessages.length - index, 0, userMessage);
     }
     const messages = baseMessages;
-    //console.log(JSON.stringify(messages));
+    console.log("Requesting model:", model);
+    console.log("Using API Key from env:", modelConfig.apiKey);
+    console.log("Using baseURL:", modelConfig.baseURL);
+    console.log("Payload to OpenAI:", JSON.stringify({ model, messages }, null, 2));
 
     // 使用流式响应
     const stream = await openai.chat.completions.create({
@@ -55,7 +58,9 @@ export async function onRequestPost({ env, request }) {
       async start(controller) {
         try {
           for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
+            console.log("Received chunk:", JSON.stringify(chunk));
+            const content = chunk.choices[0]?.delta?.content || 
+            console.log("Extracted content:", content);
             if (content) {
               // 发送数据块
               controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content })}\n\n`));
@@ -79,9 +84,17 @@ export async function onRequestPost({ env, request }) {
     });
 
   } catch (error) {
-    console.error(error.message);
+    console.error("API Error in chat.ts:", error.message, error.stack);
+    let errorMessage = "对不起，服务又断开了。";
+    if (error.message.includes("API密钥未配置")) {
+      errorMessage = "对不起，API密钥未配置，请联系管理员。";
+    } else if (error.message.includes("不支持的模型类型")) {
+      errorMessage = "对不起，不支持的模型类型，请联系管理员。";
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
     return Response.json(
-      { error: error.message },
+      { error: errorMessage },
       { status: 500 }
     );
   }
