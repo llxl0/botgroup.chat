@@ -59,7 +59,7 @@ export async function onRequestPost({ env, request }) {
         try {
           for await (const chunk of stream) {
             console.log("Received chunk:", JSON.stringify(chunk));
-            const content = chunk.choices[0]?.delta?.content || 
+            const content = chunk.choices[0]?.delta?.content || '';
             console.log("Extracted content:", content);
             if (content) {
               // 发送数据块
