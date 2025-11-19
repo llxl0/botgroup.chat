@@ -1,36 +1,37 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Share2, Settings2, ChevronLeft } from 'lucide-react';
+import React, { useState, useRef, useEffect } from "react";
+import { Send, Share2, Settings2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { request } from '@/utils/request';
-import { 
-  Tooltip, 
-  TooltipContent, 
-  TooltipProvider, 
-  TooltipTrigger 
+import { request } from "@/utils/request";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
 
 import type { AICharacter } from "@/config/aiCharacters";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
-import { SharePoster } from '@/pages/chat/components/SharePoster';
-import { MembersManagement } from '@/pages/chat/components/MembersManagement';
-import Sidebar from './Sidebar';
-import { AdBanner, AdBannerMobile } from './AdSection';
-import { useUserStore } from '@/store/userStore';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { getAvatarData } from '@/utils/avatar';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { SharePoster } from "@/pages/chat/components/SharePoster";
+import { MembersManagement } from "@/pages/chat/components/MembersManagement";
+import Sidebar from "./Sidebar";
+import { AdBanner, AdBannerMobile } from "./AdSection";
+import { useUserStore } from "@/store/userStore";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { getAvatarData } from "@/utils/avatar";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useChatHistoryPersistence } from "@/hooks/useChatHistoryPersistence";
 
-
-// 修改 KaTeXStyle 组件
+// 仅在聊天消息内应用 KaTeX 样式
 const KaTeXStyle = () => (
-  <style dangerouslySetInnerHTML={{ __html: `
-    /* 只在聊天消息内应用 KaTeX 样式 */
+  <style
+    dangerouslySetInnerHTML={{
+      __html: `
     .chat-message .katex-html {
       display: none;
     }
@@ -49,35 +50,40 @@ const KaTeXStyle = () => (
       text-align: center;
     }
     
-    /* 其他必要的 KaTeX 样式 */
     @import "katex/dist/katex.min.css";
-  `}} />
+  `,
+    }}
+  />
 );
-
 
 const ChatUI = () => {
   const userStore = useUserStore();
   const isMobile = useIsMobile();
 
-  //获取url参数
+  // 从 URL 获取群组索引
   const urlParams = new URLSearchParams(window.location.search);
-  const id = urlParams.get('id')? parseInt(urlParams.get('id')!) : 0;
+  const id = urlParams.get("id") ? parseInt(urlParams.get("id")!) : 0;
+
   // 1. 所有的 useState 声明
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(id);
-  const [group, setGroup] = useState(null);
-  const [groupAiCharacters, setGroupAiCharacters] = useState([]);
+  const [group, setGroup] = useState<any | null>(null);
+  const [groupAiCharacters, setGroupAiCharacters] = useState<AICharacter[]>(
+    []
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isGroupDiscussionMode, setIsGroupDiscussionMode] = useState(false);
-  const [users, setUsers] = useState([]);
-  const [allNames, setAllNames] = useState([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [allNames, setAllNames] = useState<string[]>([]);
   const [showMembers, setShowMembers] = useState(false);
-  // 使用 localStorage 来持久化消息，key 包含群组 ID 以区分不同群组的聊天记录
-  const [messages, setMessages, clearMessages] = useLocalStorage(
+
+  // 使用 localStorage 来持久化消息，key 包含群组索引以区分不同群组的聊天记录
+  const [messages, setMessages, clearMessages] = useLocalStorage<any[]>(
     `chat_messages_group_${id}`,
     []
   );
+
   const [showAd, setShowAd] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [pendingContent, setPendingContent] = useState("");
@@ -86,89 +92,99 @@ const ChatUI = () => {
   const [showPoster, setShowPoster] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false); // 默认关闭，稍后根据设备类型设置
 
-  // 根据设备类型设置侧边栏默认状态
-  useEffect(() => {
-    if (isMobile !== undefined) {
-      setSidebarOpen(!isMobile); // 手机端关闭，PC端开启
-    }
-  }, [isMobile]);
-
   // 2. 所有的 useRef 声明
   const currentMessageRef = useRef<number | null>(null);
   const typewriterRef = useRef<NodeJS.Timeout | null>(null);
-  const accumulatedContentRef = useRef(""); 
+  const accumulatedContentRef = useRef("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const abortController = useRef(new AbortController());
-
-  // 添加一个 ref 来跟踪是否已经初始化
   const isInitialized = useRef(false);
 
-  // 3. 所有的 useEffect
+  // 根据设备类型设置侧边栏默认状态
   useEffect(() => {
-    // 如果已经初始化过，则直接返回
+    if (isMobile !== undefined) {
+      setSidebarOpen(!isMobile); // 手机端关闭，PC 端开启
+    }
+  }, [isMobile]);
+
+  // 初始化数据：群组、角色、用户信息
+  useEffect(() => {
     if (isInitialized.current) return;
 
     const initData = async () => {
       try {
         const response = await request(`/api/init`);
-        if (!response.ok) {
-          throw new Error('初始化数据失败');
-        }
-        const {data} = await response.json();
-        console.log("初始化数据", data);
-        const group = data.groups[selectedGroupIndex];
-        const characters = data.characters;
+        const { data } = await response.json();
+
+        const currentGroup = data.groups[selectedGroupIndex];
+        const characters: AICharacter[] = data.characters;
+
         setGroups(data.groups);
-        setGroup(group);
+        setGroup(currentGroup);
         setIsInitializing(false);
-        setIsGroupDiscussionMode(group.isGroupDiscussionMode);
-        const groupAiCharacters = characters
-          .filter(character => group.members.includes(character.id))
-          .filter(character => character.personality !== "sheduler")
+        setIsGroupDiscussionMode(currentGroup.isGroupDiscussionMode);
+
+        const groupCharacters = characters
+          .filter((character) => currentGroup.members.includes(character.id))
+          .filter((character) => character.personality !== "sheduler")
           .sort((a, b) => {
-            return group.members.indexOf(a.id) - group.members.indexOf(b.id);
+            return (
+              currentGroup.members.indexOf(a.id) -
+              currentGroup.members.indexOf(b.id)
+            );
           });
-        setGroupAiCharacters(groupAiCharacters);
-        const allNames = groupAiCharacters.map(character => character.name);
-        allNames.push('user');
-        let avatar_url = null;
-        let nickname = '我';
-        setAllNames(allNames);
+
+        setGroupAiCharacters(groupCharacters);
+
+        const names = groupCharacters.map((character) => character.name);
+        names.push("user");
+        setAllNames(names);
+
+        let avatarUrl: string | null = null;
+        let nickname = "";
+
         if (data.user && data.user != null) {
-          const response1 = await request('/api/user/info');
+          const response1 = await request("/api/user/info");
           const userInfo = await response1.json();
-          //设置store
           userStore.setUserInfo(userInfo.data);
-          avatar_url = userInfo.data.avatar_url;
+          avatarUrl = userInfo.data.avatar_url;
           nickname = userInfo.data.nickname;
         } else {
-          // 设置空的用户信息
           userStore.setUserInfo({
             id: 0,
-            phone: '',
-            nickname: nickname,
+            phone: "",
+            nickname,
             avatar_url: null,
-            status: 0
+            status: 0,
           });
         }
+
         setUsers([
-          { id: 1, name: nickname, avatar: avatar_url },
-          ...groupAiCharacters
+          { id: 1, name: nickname, avatar: avatarUrl },
+          ...groupCharacters,
         ]);
       } catch (error) {
-        console.error("初始化数据失败:", error);
+        console.error("初始化数据失败", error);
         setIsInitializing(false);
       }
     };
 
     initData();
-    // 标记为已初始化
     isInitialized.current = true;
-  }, [userStore]);
+  }, [userStore, selectedGroupIndex]);
+
+  // 使用 KV 持久化当前群组的消息
+  useChatHistoryPersistence({
+    group,
+    messages,
+    setMessages,
+    groupAiCharacters,
+    users,
+  });
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
@@ -185,29 +201,30 @@ const ChatUI = () => {
     };
   }, []);
 
-  // 添加一个新的 useEffect 来监听 userStore.userInfo 的变化
+  // 当用户信息更新时刷新 users 列表中的用户信息
   useEffect(() => {
     if (userStore.userInfo && users.length > 0) {
-      setUsers(prev => [
-        { id: 1, name: userStore.userInfo.nickname, avatar: userStore.userInfo.avatar_url? userStore.userInfo.avatar_url : null },
-        ...prev.slice(1) // 保留其他 AI 角色
+      setUsers((prev) => [
+        {
+          id: 1,
+          name: userStore.userInfo.nickname,
+          avatar: userStore.userInfo.avatar_url
+            ? userStore.userInfo.avatar_url
+            : null,
+        },
+        ...prev.slice(1),
       ]);
     }
-  }, [userStore.userInfo]); // 当 userInfo 变化时更新 users
-
-  // 4. 工具函数
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, [userStore.userInfo, users.length]);
 
   const handleRemoveUser = (userId: number) => {
-    setUsers(users.filter(user => user.id !== userId));
+    setUsers(users.filter((user) => user.id !== userId));
   };
 
   const handleToggleMute = (userId: string) => {
-    setMutedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId)
+    setMutedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
         : [...prev, userId]
     );
   };
@@ -220,7 +237,7 @@ const ChatUI = () => {
     setSidebarOpen(!sidebarOpen);
   };
 
-  // 5. 加载检查
+  // 加载检查
   if (isInitializing || !group) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-orange-50 via-orange-50/70 to-orange-100 flex items-center justify-center">
@@ -230,7 +247,6 @@ const ChatUI = () => {
   }
 
   const handleSendMessage = async () => {
-    //判断是否Loding
     if (isLoading) return;
     if (!inputMessage.trim()) return;
 
@@ -239,185 +255,222 @@ const ChatUI = () => {
       id: messages.length + 1,
       sender: users[0],
       content: inputMessage,
-      isAI: false
+      isAI: false,
     };
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev: any[]) => [...prev, userMessage]);
     setInputMessage("");
     setIsLoading(true);
     setPendingContent("");
     accumulatedContentRef.current = "";
 
     // 构建历史消息数组
-    let messageHistory = messages.map(msg => ({
-      role: 'user',
-      content: msg.sender.name == userStore.userInfo.nickname ? 'user：' + msg.content :  msg.sender.name + '：' + msg.content,
-      name: msg.sender.name
+    let messageHistory = messages.map((msg: any) => ({
+      role: "user",
+      content:
+        msg.sender.name === userStore.userInfo.nickname
+          ? "user：" + msg.content
+          : msg.sender.name + "：" + msg.content,
+      name: msg.sender.name,
     }));
-    let selectedGroupAiCharacters = groupAiCharacters;
+
+    let selectedGroupAi = groupAiCharacters;
+
+    // 使用 scheduler 选择参与对话的 AI
     if (!isGroupDiscussionMode) {
-      const shedulerResponse = await request(`/api/scheduler`, {
-        method: 'POST',
+      const schedulerResponse = await request(`/api/scheduler`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: inputMessage, history: messageHistory, availableAIs: groupAiCharacters })
+        body: JSON.stringify({
+          message: inputMessage,
+          history: messageHistory,
+          availableAIs: groupAiCharacters,
+        }),
       });
-      const shedulerData = await shedulerResponse.json();
-      const selectedAIs = shedulerData.selectedAIs;
-      selectedGroupAiCharacters = selectedAIs.map(ai => groupAiCharacters.find(c => c.id === ai));
+      const schedulerData = await schedulerResponse.json();
+      const selectedAIs = schedulerData.selectedAIs;
+      selectedGroupAi = selectedAIs.map((ai: string) =>
+        groupAiCharacters.find((c) => c.id === ai)
+      ) as AICharacter[];
     }
-    for (let i = 0; i < selectedGroupAiCharacters.length; i++) {
-      //禁言
-      if (mutedUsers.includes(selectedGroupAiCharacters[i].id)) {
+
+    for (let i = 0; i < selectedGroupAi.length; i++) {
+      const character = selectedGroupAi[i];
+      if (!character) continue;
+
+      // 禁言检查
+      if (mutedUsers.includes(character.id)) {
         continue;
       }
-      // 创建当前 AI 角色的消息
+
       const aiMessage = {
         id: messages.length + 2 + i,
-        sender: { id: selectedGroupAiCharacters[i].id, name: selectedGroupAiCharacters[i].name, avatar: selectedGroupAiCharacters[i].avatar },
+        sender: {
+          id: character.id,
+          name: character.name,
+          avatar: character.avatar,
+        },
         content: "",
-        isAI: true
+        isAI: true,
       };
-      
-      // 添加当前 AI 的消息
-      setMessages(prev => [...prev, aiMessage]);
+
+      setMessages((prev: any[]) => [...prev, aiMessage]);
+
       let uri = "/api/chat";
-      if (selectedGroupAiCharacters[i].rag == true) {
+      if ((character as any).rag === true) {
         uri = "/rag/query";
       }
+
       try {
         const response = await request(uri, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: selectedGroupAiCharacters[i].model,
+            model: character.model,
             message: inputMessage,
             query: inputMessage,
-            personality: selectedGroupAiCharacters[i].personality,
+            personality: character.personality,
             history: messageHistory,
             index: i,
-            aiName: selectedGroupAiCharacters[i].name,
-            rag: selectedGroupAiCharacters[i].rag,
-            knowledge: selectedGroupAiCharacters[i].knowledge,
-            custom_prompt: selectedGroupAiCharacters[i].custom_prompt.replace('#groupName#', group.name) + "\n" + group.description
+            aiName: character.name,
+            rag: (character as any).rag,
+            knowledge: (character as any).knowledge,
+            custom_prompt:
+              character.custom_prompt.replace("#groupName#", group.name) +
+              "\n" +
+              group.description,
           }),
         });
-
-        if (!response.ok) {
-          throw new Error('请求失败');
-        }
 
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
 
         if (!reader) {
-          throw new Error('无法获取响应流');
+          throw new Error("无法获取响应流");
         }
 
-        let buffer = '';
-        let completeResponse = ''; // 用于跟踪完整的响应
-        // 添加超时控制
-        const timeout = 10000; // 10秒超时
+        let buffer = "";
+        let completeResponse = "";
+        const timeout = 10000;
+
         while (true) {
-          //console.log("读取中")
           const startTime = Date.now();
-          let { done, value } = await Promise.race([
+          let { done, value } = (await Promise.race([
             reader.read(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('响应超时')), timeout - (Date.now() - startTime))
-            )
-          ]);
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("响应超时")),
+                timeout - (Date.now() - startTime)
+              )
+            ),
+          ])) as ReadableStreamReadResult<Uint8Array>;
 
           if (Date.now() - startTime > timeout) {
             reader.cancel();
-            console.log("读取超时")
             if (completeResponse.trim() === "") {
-              throw new Error('响应超时');
+              throw new Error("响应超时");
             }
             done = true;
           }
 
           if (done) {
-            //如果completeResponse为空，
             if (completeResponse.trim() === "") {
-            completeResponse = "对不起，我还不够智能，服务又断开了。";
-            setMessages(prev => {
-              const newMessages = [...prev];
-              const aiMessageIndex = newMessages.findIndex(msg => msg.id === aiMessage.id);
-              if (aiMessageIndex !== -1) {
-                newMessages[aiMessageIndex] = {
-                  ...newMessages[aiMessageIndex],
-                  content: completeResponse
-                };
-              }
-              return newMessages;
-            });}
+              completeResponse = "对不起，我还不够智能，服务又断开了。";
+              setMessages((prev: any[]) => {
+                const newMessages = [...prev];
+                const idx = newMessages.findIndex(
+                  (msg) => msg.id === aiMessage.id
+                );
+                if (idx !== -1) {
+                  newMessages[idx] = {
+                    ...newMessages[idx],
+                    content: completeResponse,
+                  };
+                }
+                return newMessages;
+              });
+            }
             break;
           }
-          
-          buffer += decoder.decode(value, { stream: true });
-          
+
+          buffer += decoder.decode(value!, { stream: true });
+
           let newlineIndex;
-          while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+          while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
             const line = buffer.slice(0, newlineIndex);
             buffer = buffer.slice(newlineIndex + 1);
-            
-            if (line.startsWith('data: ')) {
+
+            if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.content) {
                   completeResponse += data.content;
-                  //正则去掉前面的任何AI名称：格式
-                  completeResponse = completeResponse.replace(new RegExp(`^(${allNames.join('|')})：`, 'i'), '');
-                  setMessages(prev => {
+                  completeResponse = completeResponse.replace(
+                    new RegExp(`^(${allNames.join("|")})：`, "i"),
+                    ""
+                  );
+                  setMessages((prev: any[]) => {
                     const newMessages = [...prev];
-                    const aiMessageIndex = newMessages.findIndex(msg => msg.id === aiMessage.id);
-                    if (aiMessageIndex !== -1) {
-                      newMessages[aiMessageIndex] = {
-                        ...newMessages[aiMessageIndex],
-                        content: completeResponse
+                    const idx = newMessages.findIndex(
+                      (msg) => msg.id === aiMessage.id
+                    );
+                    if (idx !== -1) {
+                      newMessages[idx] = {
+                        ...newMessages[idx],
+                        content: completeResponse,
                       };
                     }
                     return newMessages;
                   });
-                } 
-
+                }
               } catch (e) {
-                console.error('解析响应数据失败:', e);
+                console.error("解析响应数据失败:", e);
               }
             }
           }
         }
 
-        // 将当前AI的回复添加到消息历史中，供下一个AI使用
+        // 将当前 AI 的回复添加到消息历史中
         messageHistory.push({
-          role: 'user',
-          content: aiMessage.sender.name + '：' + completeResponse,
-          name: aiMessage.sender.name
+          role: "user",
+          content: character.name + "：" + completeResponse,
+          name: character.name,
         });
 
-        // 等待一小段时间再开始下一个 AI 的回复
-        if (i < groupAiCharacters.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        if (i < selectedGroupAi.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
-
-      } catch (error) {
-        console.error("发送消息失败:", error);
+      } catch (error: any) {
+        console.error("发送消息失败", error);
         messageHistory.push({
-          role: 'user',
-          content: aiMessage.sender.name + "对不起，我还不够智能，服务又断开了(错误：" + error.message + ")。",
-          name: aiMessage.sender.name
+          role: "user",
+          content:
+            character.name +
+            "对不起，我还不够智能，服务又断开了（错误：" +
+            error.message +
+            "）",
+          name: character.name,
         });
-        setMessages(prev => prev.map(msg => 
-          msg.id === aiMessage.id 
-            ? { ...msg, content: "对不起，我还不够智能，服务又断开了(错误：" + error.message + ")。", isError: true }
-            : msg
-        ));
+        setMessages((prev: any[]) =>
+          prev.map((msg) =>
+            msg.id === aiMessage.id
+              ? {
+                  ...msg,
+                  content:
+                    "对不起，我还不够智能，服务又断开了（错误：" +
+                    error.message +
+                    "）",
+                  isError: true,
+                }
+              : msg
+          )
+        );
       }
     }
-    
+
     setIsLoading(false);
   };
 
@@ -425,11 +478,8 @@ const ChatUI = () => {
     abortController.current.abort();
   };
 
-  // 处理群组选择
   const handleSelectGroup = (index: number) => {
-    //进行跳转到?id=index
     window.location.href = `?id=${index}`;
-    return;
   };
 
   return (
@@ -437,41 +487,56 @@ const ChatUI = () => {
       <KaTeXStyle />
       <div className="fixed inset-0 bg-gradient-to-br from-orange-50 via-orange-50/70 to-orange-100 flex items-start md:items-center justify-center overflow-hidden">
         <div className="h-full flex bg-white w-full mx-auto relative shadow-xl md:max-w-5xl md:h-[96dvh] md:my-auto md:rounded-lg">
-          {/* 传递 selectedGroupIndex 和 onSelectGroup 回调给 Sidebar */}
-          <Sidebar 
-            isOpen={sidebarOpen} 
-            toggleSidebar={toggleSidebar} 
-            selectedGroupIndex={selectedGroupIndex}
-            onSelectGroup={handleSelectGroup}
-            groups={groups}
-          />
-          
-          {/* 聊天主界面 */}
-          <div className="flex flex-col flex-1">
-            {/* Header */}
-            <header className="bg-white shadow flex-none md:rounded-t-lg">
-              <div className="flex items-center justify-between px-0 py-1.5">
-                {/* 左侧群组信息 */}
-                <div className="flex items-center md:px-2.5">
-                  <div 
-                    className="md:hidden flex items-center justify-center m-1  cursor-pointer" 
-                    onClick={toggleSidebar}
-                  >
-                    <ChevronLeft className="w-6 h-6" />
-                  </div>
-                  
-                  <h1 className="font-medium text-base -ml-1">{group.name}({users.length})</h1>
-                </div>
+          {/* 左侧 Sidebar */}
+          <div
+            className={`relative flex-shrink-0 border-r border-gray-200 bg-gray-50/80 backdrop-blur-sm transition-all duration-300 ${
+              sidebarOpen ? "w-64" : "w-0 md:w-64"
+            }`}
+          >
+            <div
+              className={`h-full flex flex-col ${
+                sidebarOpen ? "opacity-100" : "opacity-0 md:opacity-100"
+              } transition-opacity duration-200`}
+            >
+              <Sidebar
+                groups={groups}
+                selectedGroupIndex={selectedGroupIndex}
+                onSelectGroup={handleSelectGroup}
+                onToggleSidebar={toggleSidebar}
+              />
+            </div>
+          </div>
 
-                
-                {/* 右侧头像组和按钮 */}
-                <div className="flex items-center">
-                {/* 广告位 手机端不展示 */}
-                 <div className="hidden md:block">
-                   <AdBanner show={showAd} closeAd={() => setShowAd(false)} />
-                 </div>
-                
-                  <div className="flex -space-x-2 ">
+          {/* 右侧主内容区域 */}
+          <div className="flex-1 flex flex-col h-full">
+            {/* 顶部导航 */}
+            <header className="flex items-center justify-between px-3 py-2 border-b bg-white/80 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <button
+                  className="md:hidden mr-1"
+                  onClick={toggleSidebar}
+                  aria-label="Toggle sidebar"
+                >
+                  <ChevronLeft className="w-6 h-6 text-gray-600" />
+                </button>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-base font-semibold text-gray-900">
+                      {group.name}
+                    </h1>
+                  </div>
+                  <p className="text-xs text-gray-500 line-clamp-1 max-w-xs md:max-w-md">
+                    {group.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="hidden md:block">
+                  <AdBanner show={showAd} closeAd={() => setShowAd(false)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-2">
                     {users.slice(0, 4).map((user) => {
                       const avatarData = getAvatarData(user.name);
                       return (
@@ -479,10 +544,18 @@ const ChatUI = () => {
                           <Tooltip>
                             <TooltipTrigger>
                               <Avatar className="w-7 h-7 border-2 border-white">
-                                {'avatar' in user && user.avatar && user.avatar !== null ? (
+                                {"avatar" in user &&
+                                user.avatar &&
+                                user.avatar !== null ? (
                                   <AvatarImage src={user.avatar} />
                                 ) : (
-                                  <AvatarFallback style={{ backgroundColor: avatarData.backgroundColor, color: 'white' }}>
+                                  <AvatarFallback
+                                    style={{
+                                      backgroundColor:
+                                        avatarData.backgroundColor,
+                                      color: "white",
+                                    }}
+                                  >
                                     {avatarData.text}
                                   </AvatarFallback>
                                 )}
@@ -501,45 +574,88 @@ const ChatUI = () => {
                       </div>
                     )}
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => setShowMembers(true)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowMembers(true)}
+                  >
                     <Settings2 className="w-5 h-5" />
                   </Button>
                 </div>
               </div>
             </header>
 
-            {/* Main Chat Area */}
+            {/* 主聊天区域 */}
             <div className="flex-1 overflow-hidden bg-gray-100">
-
-              <ScrollArea className={`h-full ${!showAd ? 'px-2 py-1' : ''} md:px-2 md:py-1`} ref={chatAreaRef}>
+              <ScrollArea
+                className={`h-full ${
+                  !showAd ? "px-2 py-1" : ""
+                } md:px-2 md:py-1`}
+                ref={chatAreaRef}
+              >
                 <div className="md:hidden">
-                  <AdBannerMobile show={showAd} closeAd={() => setShowAd(false)} />
+                  <AdBannerMobile
+                    show={showAd}
+                    closeAd={() => setShowAd(false)}
+                  />
                 </div>
                 <div className="space-y-4">
-                  {messages.map((message) => (
-                    <div key={message.id} 
-                      className={`flex items-start gap-2 ${message.sender.name === userStore.userInfo.nickname ? "justify-end" : ""}`}>
+                  {messages.map((message: any) => (
+                    <div
+                      key={message.id}
+                      className={`flex items-start gap-2 ${
+                        message.sender.name === userStore.userInfo.nickname
+                          ? "justify-end"
+                          : ""
+                      }`}
+                    >
                       {message.sender.name !== userStore.userInfo.nickname && (
                         <Avatar>
-                          {'avatar' in message.sender && message.sender.avatar ? (
-                            <AvatarImage src={message.sender.avatar} className="w-10 h-10" />
+                          {"avatar" in message.sender && message.sender.avatar ? (
+                            <AvatarImage
+                              src={message.sender.avatar}
+                              className="w-10 h-10"
+                            />
                           ) : (
-                          <AvatarFallback style={{ backgroundColor: getAvatarData(message.sender.name).backgroundColor, color: 'white' }}>
-                            {message.sender.name[0]}
-                          </AvatarFallback>
+                            <AvatarFallback
+                              style={{
+                                backgroundColor: getAvatarData(
+                                  message.sender.name
+                                ).backgroundColor,
+                                color: "white",
+                              }}
+                            >
+                              {message.sender.name[0]}
+                            </AvatarFallback>
                           )}
                         </Avatar>
                       )}
-                      <div className={message.sender.name === userStore.userInfo.nickname ? "text-right" : ""}>
-                        <div className="text-sm text-gray-500">{message.sender.name}</div>
-                        <div className={`mt-1 p-3 rounded-lg shadow-sm chat-message ${
-                          message.sender.name === userStore.userInfo.nickname ? "bg-blue-500 text-white text-left" : "bg-white"
-                        }`}>
-                          <ReactMarkdown 
+                      <div
+                        className={
+                          message.sender.name === userStore.userInfo.nickname
+                            ? "text-right"
+                            : ""
+                        }
+                      >
+                        <div className="text-sm text-gray-500">
+                          {message.sender.name}
+                        </div>
+                        <div
+                          className={`mt-1 p-3 rounded-lg shadow-sm chat-message ${
+                            message.sender.name ===
+                            userStore.userInfo.nickname
+                              ? "bg-blue-500 text-white text-left"
+                              : "bg-white"
+                          }`}
+                        >
+                          <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkMath]}
                             rehypePlugins={[rehypeKatex]}
                             className={`prose dark:prose-invert max-w-none ${
-                              message.sender.name === userStore.userInfo.nickname ? "text-white [&_*]:text-white" : ""
+                              message.sender.name ===
+                              userStore.userInfo.nickname
+                                ? "text-white [&_*]:text-white"
+                                : ""
                             }
                             [&_h2]:py-1
                             [&_h2]:m-0
@@ -557,8 +673,8 @@ const ChatUI = () => {
                             [&_pre_code]:break-words
                             [&_code]:text-sm
                             [&_code]:text-gray-400
-                            [&_code:not(:where([class~="language-"]))]:text-pink-500
-                            [&_code:not(:where([class~="language-"]))]:bg-transparent
+                            [&_code:not(:where([class~=\"language-\"]))]:text-pink-500
+                            [&_code:not(:where([class~=\"language-\"]))]:bg-transparent
                             [&_a]:text-blue-500
                             [&_a]:no-underline
                             [&_ul]:my-2
@@ -572,42 +688,64 @@ const ChatUI = () => {
                           >
                             {message.content}
                           </ReactMarkdown>
-                          {message.isAI && isTyping && currentMessageRef.current === message.id && (
-                            <span className="typing-indicator ml-1">▋</span>
-                          )}
+                          {message.isAI &&
+                            isTyping &&
+                            currentMessageRef.current === message.id && (
+                              <span className="typing-indicator ml-1">
+                                …
+                              </span>
+                            )}
                         </div>
                       </div>
                       {message.sender.name === userStore.userInfo.nickname && (
                         <Avatar>
-                         {'avatar' in message.sender && message.sender.avatar ? (
-                            <AvatarImage src={message.sender.avatar} className="w-10 h-10" />
+                          {"avatar" in message.sender && message.sender.avatar ? (
+                            <AvatarImage
+                              src={message.sender.avatar}
+                              className="w-10 h-10"
+                            />
                           ) : (
-                          <AvatarFallback style={{ backgroundColor: getAvatarData(message.sender.name).backgroundColor, color: 'white' }}>
-                            {message.sender.name[0]}
-                          </AvatarFallback>
+                            <AvatarFallback
+                              style={{
+                                backgroundColor: getAvatarData(
+                                  message.sender.name
+                                ).backgroundColor,
+                                color: "white",
+                              }}
+                            >
+                              {message.sender.name[0]}
+                            </AvatarFallback>
                           )}
                         </Avatar>
                       )}
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
-                  {/* 添加一个二维码 */}
-                  <div id="qrcode" className="flex flex-col items-center hidden">
-                    <img src="/img/qr.png" alt="QR Code" className="w-24 h-24" />
-                    <p className="text-sm text-gray-500 mt-2 font-medium tracking-tight bg-gray-50 px-3 py-1 rounded-full">扫码体验AI群聊</p>
+                  <div
+                    id="qrcode"
+                    className="flex flex-col items-center hidden"
+                  >
+                    <img
+                      src="/img/qr.png"
+                      alt="QR Code"
+                      className="w-24 h-24"
+                    />
+                    <p className="text-sm text-gray-500 mt-2 font-medium tracking-tight bg-gray-50 px-3 py-1 rounded-full">
+                      扫码体验AI群聊
+                    </p>
                   </div>
                 </div>
               </ScrollArea>
             </div>
 
-            {/* Input Area */}
+            {/* 底部输入区域 */}
             <div className="bg-white border-t py-3 px-2 md:rounded-b-lg">
               <div className="flex gap-1 pb-[env(safe-area-inset-bottom)]">
                 {messages.length > 0 && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button 
+                        <Button
                           variant="outline"
                           size="icon"
                           onClick={handleShareChat}
@@ -622,17 +760,14 @@ const ChatUI = () => {
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <Input 
-                  placeholder="输入消息..." 
+                <Input
+                  placeholder="输入消息..."
                   className="flex-1"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                 />
-                <Button 
-                  onClick={handleSendMessage}
-                  disabled={isLoading}
-                >
+                <Button onClick={handleSendMessage} disabled={isLoading}>
                   {isLoading ? (
                     <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   ) : (
@@ -644,15 +779,17 @@ const ChatUI = () => {
           </div>
         </div>
 
-        {/* Members Management Dialog */}
-        <MembersManagement 
+        {/* 成员管理对话框 */}
+        <MembersManagement
           showMembers={showMembers}
           setShowMembers={setShowMembers}
           users={users}
           mutedUsers={mutedUsers}
           handleToggleMute={handleToggleMute}
           isGroupDiscussionMode={isGroupDiscussionMode}
-          onToggleGroupDiscussion={() => setIsGroupDiscussionMode(!isGroupDiscussionMode)}
+          onToggleGroupDiscussion={() =>
+            setIsGroupDiscussionMode(!isGroupDiscussionMode)
+          }
           getAvatarData={getAvatarData}
           onClearMessages={() => {
             clearMessages();
@@ -661,8 +798,8 @@ const ChatUI = () => {
         />
       </div>
 
-      {/* 添加 SharePoster 组件 */}
-      <SharePoster 
+      {/* 分享聊天记录海报 */}
+      <SharePoster
         isOpen={showPoster}
         onClose={() => setShowPoster(false)}
         chatAreaRef={chatAreaRef}
@@ -672,3 +809,4 @@ const ChatUI = () => {
 };
 
 export default ChatUI;
+
