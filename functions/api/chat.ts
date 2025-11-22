@@ -6,9 +6,28 @@ type ChatMessage = {
   content: string;
 };
 
+const encoder = new TextEncoder();
+const sseHeaders = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
+
+function streamSingleMessage(content: string, status = 200) {
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ content })}\n\n`)
+      );
+      controller.close();
+    },
+  });
+  return new Response(readable, { status, headers: sseHeaders });
+}
+
 export async function onRequestPost({ env, request }) {
   try {
-    const payload = await request.json();
+    const payload = await request.json().catch(() => ({}));
     const {
       message = "",
       custom_prompt = "",
@@ -19,7 +38,7 @@ export async function onRequestPost({ env, request }) {
     } = payload || {};
 
     if (!message || typeof message !== "string") {
-      return Response.json({ error: "缺少用户消息内容" }, { status: 400 });
+      return streamSingleMessage("缺少用户消息内容", 400);
     }
 
     const safeHistory: ChatMessage[] = Array.isArray(history)
@@ -30,14 +49,14 @@ export async function onRequestPost({ env, request }) {
 
     const modelConfig = modelConfigs.find((config) => config.model === model);
     if (!modelConfig) {
-      return Response.json({ error: "不支持的模型类型" }, { status: 400 });
+      return streamSingleMessage("不支持的模型类型，请更换模型", 200);
     }
 
     const apiKey = env[modelConfig.apiKey];
     if (!apiKey) {
-      return Response.json(
-        { error: `${model} 的 API 密钥未配置` },
-        { status: 500 }
+      return streamSingleMessage(
+        `${model} 的 API 密钥未配置，请在 Cloudflare Pages 环境变量中设置 ${modelConfig.apiKey}`,
+        200
       );
     }
 
@@ -48,10 +67,11 @@ export async function onRequestPost({ env, request }) {
 
     const systemPrompt =
       `${custom_prompt || ""}\n` +
-      `注意事项：1）你在群里叫 ${aiName}，认准自己的身份；` +
-      `2）输出内容不要添加 “${aiName}：” 这类前缀；` +
-      `3）如果用户要求玩游戏（如成语接龙），严格按规则，回复简短；` +
-      `4）保持群聊风格，除新闻总结外尽量控制在 50 字以内。`;
+      `注意事项：` +
+      `1) 你的名字是 ${aiName}，保持这个身份；` +
+      `2) 输出内容不要添加 “${aiName}：” 这类前缀；` +
+      `3) 若玩游戏（如成语接龙），严格按规则，回复简短；` +
+      `4) 保持群聊风格，除新闻总结外尽量控制在 50 字以内。`;
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -78,30 +98,31 @@ export async function onRequestPost({ env, request }) {
             const content = chunk.choices?.[0]?.delta?.content;
             if (content) {
               controller.enqueue(
-                new TextEncoder().encode(
-                  `data: ${JSON.stringify({ content })}\n\n`
-                )
+                encoder.encode(`data: ${JSON.stringify({ content })}\n\n`)
               );
             }
           }
           controller.close();
         } catch (err: any) {
-          controller.error(err);
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                content: "生成过程中出错，请稍后重试",
+              })}\n\n`
+            )
+          );
+          controller.close();
           console.error("Streaming error:", err?.message || err);
         }
       },
     });
 
     return new Response(readable, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
+      status: 200,
+      headers: sseHeaders,
     });
   } catch (error: any) {
     console.error("API Error in chat.ts:", error?.message, error?.stack);
-    const errorMessage = error?.message || "服务异常，请稍后再试";
-    return Response.json({ error: errorMessage }, { status: 500 });
+    return streamSingleMessage("服务异常，请稍后再试", 200);
   }
 }
