@@ -7,3 +7,8 @@ preview_id = "cbd11575c3504e6bb043c1c250d2f7ed"  # 本地开发环境使用
 binding = "bgdb" # available in your Worker on env.DB
 database_name = "friends"
 database_id = "f68e9fa5-4aea-45db-9516-2d7052e936fa"
+
+[pages]
+# Cloudflare Pages output folder and runtime date for Pages Functions
+pages_build_output_dir = "./dist"
+compatibility_date = "2024-12-01"
