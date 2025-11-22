@@ -2,7 +2,6 @@ interface Env {
   bgkv: KVNamespace;
 }
 
-// 获取指定群组的聊天历史
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
@@ -17,6 +16,19 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         }),
         {
           status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (!env.bgkv) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "KV 未绑定，请检查 Cloudflare 配置",
+        }),
+        {
+          status: 500,
           headers: { "Content-Type": "application/json" },
         }
       );
@@ -51,7 +63,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 保存指定群组的聊天历史
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
@@ -66,6 +77,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         }),
         {
           status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (!env.bgkv) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "KV 未绑定，请检查 Cloudflare 配置",
+        }),
+        {
+          status: 500,
           headers: { "Content-Type": "application/json" },
         }
       );
@@ -97,4 +121,3 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     );
   }
 };
-
