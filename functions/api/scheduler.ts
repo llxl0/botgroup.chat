@@ -34,9 +34,10 @@ export async function onRequestPost({ env, request }) {
 async function analyzeMessageWithAI(message: string, allTags: string[], env: any, history: MessageHistory[] = []): Promise<string[]> {
     const shedulerAI = generateAICharacters(message, allTags.join(','))[0];
     const modelConfig = modelConfigs.find(config => config.model === shedulerAI.model);
-    const apiKey = env[modelConfig.apiKey];
+    const apiKey = modelConfig ? env[modelConfig.apiKey] : undefined;
     if (!apiKey) {
-      throw new Error(`${modelConfig.model} 的API密钥未配置`);
+      console.warn(`Scheduler模型 ${shedulerAI.model} 的API密钥未配置，跳过标签分析`);
+      return [];
     }
     const openai = new OpenAI({
       apiKey: apiKey,
@@ -69,9 +70,25 @@ async function scheduleAIResponses(
   availableAIs: AICharacter[],
   env: any
 ): Promise<string[]> {
+  // 0. 过滤掉没有配置 API Key 的模型，避免下游 500
+  const filteredAIs = availableAIs.filter((ai) => {
+    const cfg = modelConfigs.find((c) => c.model === (ai as any).model);
+    if (!cfg) return false;
+    const hasKey = !!env[cfg.apiKey];
+    if (!hasKey) {
+      console.warn(`模型 ${ai.name} (${cfg.model}) 缺少环境变量 ${cfg.apiKey}，已跳过调度`);
+    }
+    return hasKey;
+  });
+
+  if (filteredAIs.length === 0) {
+    console.warn('可用 AI 均无可用 API Key，返回空列表');
+    return [];
+  }
+
   // 1. 收集所有可用的标签
   const allTags = new Set<string>();
-  availableAIs.forEach(ai => {
+  filteredAIs.forEach(ai => {
     ai.tags?.forEach(tag => allTags.add(tag));
   });
 
@@ -80,13 +97,13 @@ async function scheduleAIResponses(
   console.log('matchedTags', matchedTags, allTags);
   //如果含有"文字游戏"标签，则需要全员参与
   if (matchedTags.includes("文字游戏")) {
-    return availableAIs.map(ai => ai.id);
+    return filteredAIs.map(ai => ai.id);
   }
   // 3. 计算每个AI的匹配分数
   const aiScores = new Map<string, number>();
   const messageLC = message.toLowerCase();
 
-  for (const ai of availableAIs) {
+  for (const ai of filteredAIs) {
     if (!ai.tags) continue;
 
     let score = 0;
@@ -123,7 +140,7 @@ async function scheduleAIResponses(
   // 5. 如果没有匹配到任何AI，随机选择1-2个
   if (sortedAIs.length === 0) {
     console.log('没有匹配到任何AI，随机选择1-2个');
-    const maxResponders = Math.min(2, availableAIs.length);
+    const maxResponders = Math.min(2, filteredAIs.length);
     const numResponders = Math.floor(Math.random() * maxResponders) + 1;
     
     const shuffledAIs = [...availableAIs]
